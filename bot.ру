@@ -129,20 +129,16 @@ def run_web_server():
 def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
-        raise RuntimeError("Укажи BOT_TOKEN")
-print("STARTING BOT...")
+        raise RuntimeError("BOT_TOKEN not set")
 
     app = Application.builder().token(token).build()
-async def post_init(application):
-   await application.bot.delete_webhook(drop_pending_updates=True)
-   print("WEBHOOK DETED, POLLING STARTS")
-app.post_init = post_init
-...
-# запускаем веб-сервер в отдельном потоке
-threading.Thread(target=run_web_server).start()
 
-app.run_polling()
+    # запуск фейкового веб-сервера для Railway
+    threading.Thread(target=run_web_server).start()
 
+    print("BOT STARTED")
+
+    app.run_polling()
     conv = ConversationHandler(
         entry_points=[CommandHandler("new", new)],
         states={

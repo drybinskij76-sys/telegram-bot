@@ -1,0 +1,149 @@
+import os
+from io import BytesIO
+from datetime import datetime
+
+from PIL import Image, ImageDraw, ImageFont
+from telegram import Update
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    ConversationHandler, ContextTypes, filters
+)
+
+FIO, SUM, COMMENT, INITIALS = range(4)
+
+TEMPLATE_PATH = "депрем.png"
+
+import logging
+logging.basicConfig(level=logging.INFO)
+
+# ===== Загрузка шрифтов =====
+def font(size, bold=False):
+    try:
+        if os.name == "nt":
+            path = r"C:\Windows\Fonts\arialbd.ttf" if bold else r"C:\Windows\Fonts\arial.ttf"
+        else:
+            path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else \
+                   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        return ImageFont.truetype(path, size)
+    except:
+        return ImageFont.load_default()
+
+# ===== Формат суммы =====
+def format_sum(text):
+    text = text.replace(" ", "").replace(",", ".")
+    try:
+        value = float(text)
+        rub = int(value)
+        kop = int(round((value - rub) * 100))
+        return f"{rub:,}".replace(",", " ") + f",{kop:02d}"
+    except:
+        return text
+
+# ===== Отрисовка поверх шаблона =====
+def render_card(fio, amount, comment, initials):
+    amount = format_sum(amount)
+    date_now = datetime.now().strftime("%d.%m.%y")
+
+    img = Image.open(TEMPLATE_PATH).convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    # ---- ИНИЦИАЛЫ ----
+    f_init = font(28, bold=True)
+    draw.text((55, 68), initials.upper(), fill="white", font=f_init)
+
+    # ---- ФИО ----
+    f_fio = font(22, bold=True)
+    draw.text((120, 55), fio, fill="black", font=f_fio)
+
+    # ---- СУММЫ ----
+    f_sum = font(20, bold=True)
+    draw.text((55, 185), amount, fill="black", font=f_sum)
+    draw.text((250, 185), "0,00", fill="black", font=f_sum)
+    draw.text((430, 185), amount, fill="black", font=f_sum)
+
+    # ---- КОММЕНТАРИЙ ----
+    f_comment = font(16, bold=False)
+    draw.text((35, 395), comment, fill="black", font=f_comment)
+
+    # ---- ДАТА ----
+    draw.text((35, 490), date_now, fill="black", font=f_comment)
+
+    bio = BytesIO()
+    bio.name = "result.png"
+    img.save(bio, "PNG")
+    bio.seek(0)
+    return bio
+
+# ===== Telegram логика =====
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Команда /new — создать удержание")
+
+async def new(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
+    await update.message.reply_text("Введите ФИО:")
+    return FIO
+
+async def get_fio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["fio"] = update.message.text
+    await update.message.reply_text("Введите сумму:")
+    return SUM
+
+async def get_sum(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["sum"] = update.message.text
+    await update.message.reply_text("Введите комментарий:")
+    return COMMENT
+
+async def get_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["comment"] = update.message.text
+    await update.message.reply_text("Введите инициалы:")
+    return INITIALS
+
+async def get_initials(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["initials"] = update.message.text
+
+    img = render_card(
+        context.user_data["fio"],
+        context.user_data["sum"],
+        context.user_data["comment"],
+        context.user_data["initials"],
+    )
+
+    await update.message.reply_photo(photo=img, caption="Готово ✅\n/new — ещё раз")
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return ConversationHandler.END
+
+def run_web_server():
+    port = int(os.getenv("PORT", 8080))
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot is running")
+
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    server.serve_forever()
+
+def main():
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        raise RuntimeError("Укажи BOT_TOKEN")
+print("STARTING BOT...")
+
+    app = Application.builder().token(token).build()
+async def post_init(application):
+   await application.bot.delete_webhook(drop_pending_updates=True)
+   print("WEBHOOK DETED, POLLING STARTS")
+app.post_init = post_init
+...
+# запускаем веб-сервер в отдельном потоке
+threading.Thread(target=run_web_server).start()
+
+app.run_polling()
+
+    conv = ConversationHandler(
+        entry_points=[CommandHandler("new", new)],
+        states={
+            FIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_fio)],

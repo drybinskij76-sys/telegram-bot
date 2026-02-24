@@ -140,6 +140,12 @@ def main():
 
     app.run_polling()
     conv = ConversationHandler(
-        entry_points=[CommandHandler("new", new)],
-        states={
-            FIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_fio)],
+    entry_points=[CommandHandler("new", new)],
+    states={
+        FIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_fio)],
+        SUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_sum)],
+        COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_comment)],
+        INITIALS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_initials)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
